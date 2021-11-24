@@ -1,5 +1,7 @@
 import asyncio
 import time
+import os
+from watchgod import arun_process
 from asyncio.events import AbstractEventLoop
 from asyncio.exceptions import CancelledError
 from asyncio.tasks import Task
@@ -13,6 +15,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    Callable
 )
 
 from graia.broadcast import Broadcast
@@ -1106,6 +1109,11 @@ class MultimediaMixin(AriadneMixin):
 
 T = TypeVar("T")
 
+reloadApp = None
+
+def reloadfun():
+    logger.info("Reloading Ariadne...")
+    asyncio.get_event_loop().run_until_complete(reloadApp.lifecycle())
 
 class Ariadne(
     MessageMixin, RelationshipMixin, OperationMixin, FileMixin, MultimediaMixin
@@ -1159,9 +1167,10 @@ class Ariadne(
             if isinstance(connect_info, Adapter)
             else DefaultAdapter(self.broadcast, connect_info)
         )
+        global reloadApp
+        reloadApp = self
         self.adapter.app = self
         self.mirai_session: MiraiSession = self.adapter.mirai_session
-
         self.daemon_task: Optional[Task] = None
         self.running: bool = False
         self.remote_version: str = ""
@@ -1294,6 +1303,17 @@ class Ariadne(
         except CancelledError:
             pass
         await self.stop()
+
+    @staticmethod
+    async def watchfile(reload: Callable[[], None]) -> None:
+        logger.info("Watching file changes...")
+        await arun_process(os.getcwd(), reload)
+
+    def run(self, reload: bool = False) -> None:
+        if reload:
+            self.loop.create_task(self.watchfile(reloadfun))
+        self.loop.run_forever()
+
 
     @app_ctx_manager
     async def getVersion(self, auto_set: bool = True):
