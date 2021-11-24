@@ -1314,7 +1314,6 @@ class Ariadne(
             self.loop.create_task(self.watchfile(reloadfun))
         self.loop.run_forever()
 
-
     @app_ctx_manager
     async def getVersion(self, auto_set: bool = True):
         if self.mirai_session.version:
