@@ -27,9 +27,8 @@ def split(string: str) -> List[str]:
         if not quote and char == " ":
             result.append("".join(cache))
             cache = []
-        else:
-            if char != "\\":
-                cache.append(char)
+        elif char != "\\":
+            cache.append(char)
     if cache:
         result.append("".join(cache))
     return result

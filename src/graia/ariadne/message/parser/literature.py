@@ -78,10 +78,10 @@ class Literature(BaseDispatcher):
         return result
 
     def gen_long_map_with_bar(self):
-        return {("--" + k): v for k, v in self.gen_long_map().items()}
+        return {f"--{k}": v for k, v in self.gen_long_map().items()}
 
     def gen_short_map_with_bar(self):
-        return {("-" + k): v for k, v in self.gen_short_map().items() if k is not None}
+        return {f"-{k}": v for k, v in self.gen_short_map().items() if k is not None}
 
     def parse_message(self, message_chain: MessageChain):
         string_result, id_elem_map = self.trans_to_map(message_chain)
@@ -90,25 +90,28 @@ class Literature(BaseDispatcher):
             shlex.split(string_result),
             "".join(
                 [
-                    arg.short if isinstance(arg, SwitchParameter) else (arg.short + ":")
+                    arg.short
+                    if isinstance(arg, SwitchParameter)
+                    else f"{arg.short}:"
                     for arg in self.arguments.values()
                     if arg.short
                 ]
             ),
             [
-                long if isinstance(arg, SwitchParameter) else long + "="
+                long if isinstance(arg, SwitchParameter) else f"{long}="
                 for arg in self.arguments.values()
                 for long in arg.longs
             ],
         )
+
         map_with_bar = {**self.gen_long_map_with_bar(), **self.gen_short_map_with_bar()}
         parsed_args = {
             map_with_bar[k]: (
                 MessageChain.create(
                     [
-                        Plain(i)
-                        if not re.match(r"^\$\d+$", i)
-                        else id_elem_map[int(i[1:])]
+                        id_elem_map[int(i[1:])]
+                        if re.match(r"^\$\d+$", i)
+                        else Plain(i)
                         for i in re.split(r"((?<!\\)\$[0-9]+)", v)
                         if i
                     ]
@@ -123,16 +126,20 @@ class Literature(BaseDispatcher):
             )
             for k, v in parsed_args
         }
+
         variables = [
             MessageChain.create(
                 [
-                    Plain(i) if not re.match(r"^\$\d+$", i) else id_elem_map[int(i[1:])]
+                    id_elem_map[int(i[1:])]
+                    if re.match(r"^\$\d+$", i)
+                    else Plain(i)
                     for i in re.split(r"((?<!\\)\$[0-9]+)", v)
                     if i
                 ]
             ).merge(copy=True)
             for v in variables
         ]
+
         for param_name, argument_setting in self.arguments.items():
             if param_name not in parsed_args:
                 print(argument_setting)
@@ -175,7 +182,7 @@ class Literature(BaseDispatcher):
         message_chain: MessageChain = await interface.lookup_param(
             "__literature_messagechain__", MessageChain, None
         )
-        if set([i.__class__ for i in message_chain.__root__]).intersection(
+        if {i.__class__ for i in message_chain.__root__}.intersection(
             BLOCKING_ELEMENTS
         ):
             raise ExecutionStop()
@@ -191,16 +198,14 @@ class Literature(BaseDispatcher):
         if interface.name == "__literature_messagechain__":
             return
 
-        result = interface.broadcast.decorator_interface.local_storage.get(
+        if result := interface.broadcast.decorator_interface.local_storage.get(
             "literature_detect_result"
-        )
-        if result:
+        ):
             match_result, variargs = result
             if interface.default == "__literature_variables__":
                 return variargs
 
-            arg_fetch_result = match_result.get(interface.name)
-            if arg_fetch_result:
+            if arg_fetch_result := match_result.get(interface.name):
                 match_value, raw_argument = arg_fetch_result
                 if isinstance(raw_argument, SwitchParameter):
                     return Force(match_value)

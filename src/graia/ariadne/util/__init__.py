@@ -56,27 +56,23 @@ code_exceptions_mapping: Dict[int, Type[Exception]] = {
 
 def validate_response(code: Union[dict, int]):
     origin = code
-    if isinstance(code, dict):
-        code = code.get("code")
-    else:
-        code = code
+    code = code.get("code") if isinstance(code, dict) else code
     if not isinstance(code, int) or code == 200 or code == 0:
         return
-    exc_cls = code_exceptions_mapping.get(code)
-    if exc_cls:
+    if exc_cls := code_exceptions_mapping.get(code):
         raise exc_cls(exc_cls.__doc__)
     else:
         raise UnknownError(f"{origin}")
 
 
 def loguru_excepthook(cls, val, tb, *_, **__):
-    logger.opt(exception=(cls, val, tb)).error(f"Exception:")
+    logger.opt(exception=(cls, val, tb)).error("Exception:")
 
 
 def loguru_async_handler(loop: AbstractEventLoop, ctx: dict):
-    logger.opt(exception=(Exception, ctx["message"], ctx["source_traceback"])).error(
-        f"Exception:"
-    )
+    logger.opt(
+        exception=(Exception, ctx["message"], ctx["source_traceback"])
+    ).error("Exception:")
 
 
 def inject_loguru_traceback(loop: AbstractEventLoop):

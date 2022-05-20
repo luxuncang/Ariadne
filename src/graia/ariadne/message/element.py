@@ -57,7 +57,7 @@ class Element(AriadneBaseModel, abc.ABC):
         """
 
     def __repr_args__(self) -> "ReprArgs":
-        return [(k, v) for k, v in self.dict(exclude={"type"}).items()]
+        return list(self.dict(exclude={"type"}).items())
 
     def __str__(self) -> str:
         return self.asDisplay()
@@ -361,12 +361,9 @@ class MultimediaElement(Element):
         data_bytes: Optional[bytes] = None,
         **kwargs,
     ) -> None:
-        data = {}
         if sum([bool(url), bool(path), bool(base64)]) > 1:
             raise ValueError("Too many binary initializers!")
-        # Web initializer
-        data["id"] = id
-        data["url"] = url
+        data = {"id": id, "url": url}
         # Binary initializer
         if path:
             if isinstance(path, str):
@@ -409,9 +406,7 @@ class MultimediaElement(Element):
 
     @property
     def uuid(self):
-        if self.id:
-            return self.id.split(".")[0].strip("/{}").lower()
-        return ""
+        return self.id.split(".")[0].strip("/{}").lower() if self.id else ""
 
     def __eq__(self, other: "MultimediaElement"):
         if self.type != other.type:

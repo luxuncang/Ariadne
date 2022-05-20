@@ -120,7 +120,7 @@ class WildcardMatch(Match):
     def __init__(
         self, greed: bool = True, optional: bool = False, preserve_space: bool = True
     ) -> None:
-        super().__init__(f".*", optional=optional)
+        super().__init__(".*", optional=optional)
         self.greed = greed
         self.preserve_space = preserve_space
 

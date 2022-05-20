@@ -39,15 +39,15 @@ class Sparkle:
                 k: v for k, v in self.__class__.__dict__.items() if isinstance(v, Match)
             }
         else:
-            match_map: Dict[str, Match] = {k: v for k, v in matches}
+            match_map: Dict[str, Match] = dict(matches)
         check_map = {f"_check_{i}": val for i, val in enumerate(check_args)}
-        match_map = {**check_map, **match_map}  # ensure check args come first
+        match_map = check_map | match_map
 
         if any(
             k.startswith("_")
             and not re.fullmatch(r"_check_(\d+)", k)
             or k[0] in string.digits
-            for k in match_map.keys()
+            for k in match_map
         ):
             raise ValueError("Invalid Match object name!")
 
@@ -98,39 +98,39 @@ class Sparkle:
     def match_regex(
         self, elem_mapping: Dict[str, Element], arg_list: List[str]
     ) -> None:
-        if self._regex_pattern:
-            if regex_match := self._regex.fullmatch(" ".join(arg_list)):
-                for name, match, index in self._regex_match_list:
-                    current = regex_match.group(index) or ""
-                    if isinstance(match, ElementMatch):
-                        if current:
-                            index = re.fullmatch("\b(\\d+)_\\w+\b", current).group(1)
-                            result = elem_mapping[int(index)]
-                        else:
-                            result = None
-                    else:
-                        result = MessageChain.fromMappingString(current, elem_mapping)
-                    if isinstance(match, RegexMatch):
-                        setattr(  # sparkle.{name} = toMessageChain(current)
-                            self,
-                            name,
-                            match.clone(
-                                result=result,
-                                matched=bool(current),
-                                re_match=re.match(match.pattern, current),
-                            ),
-                        )
-                    else:
-                        setattr(
-                            self,
-                            name,
-                            match.clone(
-                                result=result,
-                                matched=bool(current),
-                            ),
-                        )
+        if not self._regex_pattern:
+            return
+        if not (regex_match := self._regex.fullmatch(" ".join(arg_list))):
+            raise ValueError(f"Regex not matching: {self._regex_pattern}")
+        for name, match, index in self._regex_match_list:
+            current = regex_match.group(index) or ""
+            if isinstance(match, ElementMatch):
+                if current:
+                    index = re.fullmatch("\b(\\d+)_\\w+\b", current).group(1)
+                    result = elem_mapping[int(index)]
+                else:
+                    result = None
             else:
-                raise ValueError(f"Regex not matching: {self._regex_pattern}")
+                result = MessageChain.fromMappingString(current, elem_mapping)
+            if isinstance(match, RegexMatch):
+                setattr(  # sparkle.{name} = toMessageChain(current)
+                    self,
+                    name,
+                    match.clone(
+                        result=result,
+                        matched=bool(current),
+                        re_match=re.match(match.pattern, current),
+                    ),
+                )
+            else:
+                setattr(
+                    self,
+                    name,
+                    match.clone(
+                        result=result,
+                        matched=bool(current),
+                    ),
+                )
 
 
 T_Sparkle = TypeVar("T_Sparkle", bound=Sparkle)
@@ -160,10 +160,7 @@ class Twilight(BaseDispatcher, Generic[T_Sparkle]):
             remove_quote (bool, optional): 处理时是否要移除消息链的 Quote 元素. 默认为 True.
             remove_extra_space (bool, optional): 是否移除 Quote At AtAll 的多余空格. 默认为 False.
         """
-        if isinstance(sparkle, Sparkle):
-            self.sparkle_root = sparkle
-        else:
-            self.sparkle_root = sparkle()
+        self.sparkle_root = sparkle if isinstance(sparkle, Sparkle) else sparkle()
         self.map_params = {
             "remove_source": remove_source,
             "remove_quote": remove_quote,
@@ -207,11 +204,12 @@ class Twilight(BaseDispatcher, Generic[T_Sparkle]):
             return sparkle
         if issubclass(interface.annotation, Twilight):
             return self
-        if issubclass(interface.annotation, Match):
-            if hasattr(sparkle, interface.name):
-                match: Match = getattr(sparkle, interface.name)
-                if isinstance(match, interface.annotation):
-                    return match
+        if issubclass(interface.annotation, Match) and hasattr(
+            sparkle, interface.name
+        ):
+            match: Match = getattr(sparkle, interface.name)
+            if isinstance(match, interface.annotation):
+                return match
 
     def afterExecution(
         self,

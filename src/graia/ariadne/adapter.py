@@ -217,7 +217,7 @@ class HttpAdapter(Adapter):
         self, action: str, method: CallMethod, data: Optional[Union[dict, str]] = None
     ) -> Union[dict, list]:
         data = data or dict()
-        if method == CallMethod.GET or method == CallMethod.RESTGET:
+        if method in [CallMethod.GET, CallMethod.RESTGET]:
             if isinstance(data, str):
                 data = json.loads(data)
             async with self.session.get(
@@ -225,7 +225,7 @@ class HttpAdapter(Adapter):
             ) as response:
                 response.raise_for_status()
                 resp_json: dict = await response.json()
-        elif method == CallMethod.POST or method == CallMethod.RESTPOST:
+        elif method in [CallMethod.POST, CallMethod.RESTPOST]:
             if not isinstance(data, str):
                 data = json.dumps(data, cls=DatetimeEncoder)
             async with self.session.post(
@@ -243,10 +243,7 @@ class HttpAdapter(Adapter):
             ) as response:
                 response.raise_for_status()
                 resp_json: dict = await response.json()
-        if "data" in resp_json:
-            resp = resp_json["data"]
-        else:
-            resp = resp_json
+        resp = resp_json["data"] if "data" in resp_json else resp_json
         validate_response(resp)
         return resp
 
@@ -336,10 +333,7 @@ class WebsocketAdapter(Adapter):
         del self.sync_event[sync_id]
         del event
         validate_response(value)
-        if "data" in value:
-            return value["data"]
-        else:
-            return value
+        return value.get("data", value)
 
     async def raw_data_parser(self, raw_data: dict) -> None:
         sync_id: str = raw_data["syncId"]
@@ -354,17 +348,16 @@ class WebsocketAdapter(Adapter):
             event = await self.build_event(received_data)
             with enter_context(app=self.app, event=event):
                 self.broadcast.postEvent(event)
-        else:
-            if sync_id in self.sync_event:
-                response = self.sync_event[sync_id]
-                response.response = received_data
-                response.set()
+        elif sync_id in self.sync_event:
+            response = self.sync_event[sync_id]
+            response.response = received_data
+            response.set()
 
     async def fetch_cycle(self) -> None:
         async with self.session.ws_connect(
-            str(URL(self.mirai_session.url_gen("all")).with_query(self.query_dict)),
-            autoping=False,
-        ) as connection:
+                str(URL(self.mirai_session.url_gen("all")).with_query(self.query_dict)),
+                autoping=False,
+            ) as connection:
             logger.info("websocket: connected")
             self.ws_conn = connection
 
@@ -386,11 +379,7 @@ class WebsocketAdapter(Adapter):
                     elif ws_message.type is WSMsgType.PONG:
                         logger.debug("websocket: received pong")
                     else:
-                        logger.debug(
-                            "websocket: unknown message type - {}".format(
-                                ws_message.type
-                            )
-                        )
+                        logger.debug(f"websocket: unknown message type - {ws_message.type}")
             except Exception as e:
                 logger.exception(e)
             finally:

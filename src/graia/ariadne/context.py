@@ -32,20 +32,17 @@ def enter_message_send_context(method: UploadMethod):
 
 @contextmanager
 def enter_context(app: "Ariadne" = None, event: "Dispatchable" = None):
-    token_app = None
-    token_event = None
     token_loop = None
     token_bcc = None
     token_adapter = None
 
+    token_app = None
     if app:
         token_app = application_ctx.set(app)
         token_loop = event_loop_ctx.set(app.broadcast.loop)
         token_bcc = broadcast_ctx.set(app.broadcast)
         token_adapter = adapter_ctx.set(app.adapter)
-    if event:
-        token_event = event_ctx.set(event)
-
+    token_event = event_ctx.set(event) if event else None
     yield
 
     try:

@@ -814,7 +814,7 @@ class FileMixin(AriadneMixin):
             List[FileInfo]: 返回的文件信息列表.
         """
         if isinstance(target, Friend):
-            raise NotImplementedError(f"Not implemented for friend")
+            raise NotImplementedError("Not implemented for friend")
 
         target = target.id if isinstance(target, Friend) else target
         target = target.id if isinstance(target, Group) else target
@@ -855,7 +855,7 @@ class FileMixin(AriadneMixin):
             FileInfo: 返回的文件信息.
         """
         if isinstance(target, Friend):
-            raise NotImplementedError(f"Not implemented for friend")
+            raise NotImplementedError("Not implemented for friend")
 
         target = target.id if isinstance(target, Friend) else target
         target = target.id if isinstance(target, Group) else target
@@ -895,7 +895,7 @@ class FileMixin(AriadneMixin):
             FileInfo: 新创建文件夹的信息.
         """
         if isinstance(target, Friend):
-            raise NotImplementedError(f"Not implemented for friend")
+            raise NotImplementedError("Not implemented for friend")
 
         target = target.id if isinstance(target, Friend) else target
         target = target.id if isinstance(target, Group) else target
@@ -931,7 +931,7 @@ class FileMixin(AriadneMixin):
             None: 没有返回.
         """
         if isinstance(target, Friend):
-            raise NotImplementedError(f"Not implemented for friend")
+            raise NotImplementedError("Not implemented for friend")
 
         target = target.id if isinstance(target, Friend) else target
         target = target.id if isinstance(target, Group) else target
@@ -966,7 +966,7 @@ class FileMixin(AriadneMixin):
             None: 没有返回.
         """
         if isinstance(target, Friend):
-            raise NotImplementedError(f"Not implemented for friend")
+            raise NotImplementedError("Not implemented for friend")
 
         target = target.id if isinstance(target, Friend) else target
         target = target.id if isinstance(target, Group) else target
@@ -1002,7 +1002,7 @@ class FileMixin(AriadneMixin):
             None: 没有返回.
         """
         if isinstance(target, Friend):
-            raise NotImplementedError(f"Not implemented for friend")
+            raise NotImplementedError("Not implemented for friend")
 
         target = target.id if isinstance(target, Friend) else target
         target = target.id if isinstance(target, Group) else target
@@ -1176,12 +1176,11 @@ class Ariadne(
         self.remote_version: str = ""
         self.max_retry: int = max_retry
 
-        chat_log_enabled = True if chat_log_config is not False else False
-        self.chat_log_cfg: ChatLogConfig = (
-            chat_log_config
-            if chat_log_config
-            else ChatLogConfig(enabled=chat_log_enabled)
+        chat_log_enabled = chat_log_config is not False
+        self.chat_log_cfg: ChatLogConfig = chat_log_config or ChatLogConfig(
+            enabled=chat_log_enabled
         )
+
         if use_bypass_listener:
             inject_bypass_listener(self.broadcast)
         if use_loguru_traceback:
@@ -1252,48 +1251,50 @@ class Ariadne(
         logger.debug("Application daemon stopped.")
 
     async def launch(self):
-        if not self.running:
-            self.running = True
-            start_time = time.time()
-            logger.info("Launching app...")
-            self.broadcast.dispatcher_interface.inject_global_raw(
-                ApplicationMiddlewareDispatcher(self)
+        if self.running:
+            return
+        self.running = True
+        start_time = time.time()
+        logger.info("Launching app...")
+        self.broadcast.dispatcher_interface.inject_global_raw(
+            ApplicationMiddlewareDispatcher(self)
+        )
+        if self.chat_log_cfg.enabled:
+            self.chat_log_cfg.initialize(self)
+        self.daemon_task = self.loop.create_task(
+            self.daemon(), name="ariadne_daemon"
+        )
+        while not self.adapter.session_activated:
+            await asyncio.sleep(0.001)
+        self.remote_version = await self.getVersion()
+        logger.info(f"Remote version: {self.remote_version}")
+        if not self.remote_version.startswith("2"):
+            raise RuntimeError(
+                f"You are using an unsupported version: {self.remote_version}!"
             )
-            if self.chat_log_cfg.enabled:
-                self.chat_log_cfg.initialize(self)
-            self.daemon_task = self.loop.create_task(
-                self.daemon(), name="ariadne_daemon"
-            )
-            while not self.adapter.session_activated:
-                await asyncio.sleep(0.001)
-            self.remote_version = await self.getVersion()
-            logger.info(f"Remote version: {self.remote_version}")
-            if not self.remote_version.startswith("2"):
-                raise RuntimeError(
-                    f"You are using an unsupported version: {self.remote_version}!"
-                )
-            self.broadcast.postEvent(ApplicationLaunched(self))
-            logger.info(f"Application launched with {time.time() - start_time:.2}s")
+        self.broadcast.postEvent(ApplicationLaunched(self))
+        logger.info(f"Application launched with {time.time() - start_time:.2}s")
 
     async def stop(self):
-        if self.running:
-            self.broadcast.postEvent(ApplicationShutdowned(self))
-            self.running = False
-            if self.daemon_task:
-                self.daemon_task.cancel()
-                self.daemon_task = None
-            await self.adapter.stop()
-            for t in asyncio.all_tasks(self.loop):
-                if (
-                    t is not asyncio.current_task(self.loop)
-                    and not t.get_name().startswith("ariadne")
-                    and not t.get_name().startswith("_")
-                ):
-                    t.cancel()
-                    try:
-                        await t
-                    except asyncio.CancelledError:
-                        pass
+        if not self.running:
+            return
+        self.broadcast.postEvent(ApplicationShutdowned(self))
+        self.running = False
+        if self.daemon_task:
+            self.daemon_task.cancel()
+            self.daemon_task = None
+        await self.adapter.stop()
+        for t in asyncio.all_tasks(self.loop):
+            if (
+                t is not asyncio.current_task(self.loop)
+                and not t.get_name().startswith("ariadne")
+                and not t.get_name().startswith("_")
+            ):
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
 
     async def lifecycle(self):
         await self.launch()

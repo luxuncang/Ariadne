@@ -133,10 +133,7 @@ class MessageChain(AriadneBaseModel):
                 i.prepare()
             except NotSendableElement:
                 chain_ref.__root__.remove(i)
-        if copy:
-            return chain_ref
-        else:
-            return self
+        return chain_ref if copy else self
 
     def has(self, element: Union[Element_T, Type[Element_T]]) -> bool:
         """
@@ -211,10 +208,7 @@ class MessageChain(AriadneBaseModel):
         """
         是否包含特定元素/字符串
         """
-        if isinstance(item, str):
-            return self.hasText(item)
-        else:
-            return self.has(item)
+        return self.hasText(item) if isinstance(item, str) else self.has(item)
 
     @overload
     def __getitem__(self, item: Tuple[Element_T, int]) -> List[Element_T]:
@@ -284,21 +278,19 @@ class MessageChain(AriadneBaseModel):
         if item.start:
             first_slice = result[item.start[0] :]
             if item.start[1] is not None and first_slice:  # text slice
-                if not isinstance(first_slice[0], Plain):
-                    if not ignore_text_index:
-                        raise ValueError(
-                            "the sliced chain does not starts with a Plain: {}".format(
-                                first_slice[0]
-                            )
-                        )
-                    else:
-                        result = first_slice
-                else:
+                if isinstance(first_slice[0], Plain):
                     final_text = first_slice[0].text[item.start[1] :]
                     result = [
                         *([Plain(final_text)] if final_text else []),
                         *first_slice[1:],
                     ]
+                elif not ignore_text_index:
+                    raise ValueError(
+                        f"the sliced chain does not starts with a Plain: {first_slice[0]}"
+                    )
+
+                else:
+                    result = first_slice
             else:
                 result = first_slice
         if item.stop:
@@ -306,10 +298,9 @@ class MessageChain(AriadneBaseModel):
             if item.stop[1] is not None and first_slice:  # text slice
                 if not isinstance(first_slice[-1], Plain):
                     raise ValueError(
-                        "the sliced chain does not ends with a Plain: {}".format(
-                            first_slice[-1]
-                        )
+                        f"the sliced chain does not ends with a Plain: {first_slice[-1]}"
                     )
+
                 final_text = first_slice[-1].text[: item.stop[1]]
                 result = [
                     *first_slice[:-1],
@@ -363,10 +354,9 @@ class MessageChain(AriadneBaseModel):
                         tmp.append(Plain(split_str))
             else:
                 tmp.append(element)
-        else:
-            if tmp:
-                result.append(MessageChain(tmp, inline=True))
-                tmp = []
+        if tmp:
+            result.append(MessageChain(tmp, inline=True))
+            tmp = []
         return result
 
     def __iter__(self) -> Iterable[Element]:
@@ -414,10 +404,7 @@ class MessageChain(AriadneBaseModel):
             bool: 是否包括
         """
 
-        for i in self.merge(copy=True).get(Plain):
-            if string in i.text:
-                return True
-        return False
+        return any(string in i.text for i in self.merge(copy=True).get(Plain))
 
     def onlyContains(self, *types: Type[Element]) -> bool:
         return all(isinstance(i, types) for i in self.__root__)
@@ -442,17 +429,14 @@ class MessageChain(AriadneBaseModel):
                 result.append(deepcopy(i) if copy else i)
             else:
                 plain.append(i.text)
-        else:
-            if plain:
-                joined = "".join(plain)
-                if joined:
-                    result.append(Plain(joined))
-                plain.clear()
+        if plain:
+            if joined := "".join(plain):
+                result.append(Plain(joined))
+            plain.clear()
         if copy:
             return MessageChain(result, inline=True)
-        else:
-            self.__root__ = result
-            return self
+        self.__root__ = result
+        return self
 
     def append(self, element: Union[Element, str]) -> None:
         """
@@ -490,9 +474,8 @@ class MessageChain(AriadneBaseModel):
                         result.append(e)
         if copy:
             return MessageChain(deepcopy(self.__root__) + result, inline=True)
-        else:
-            self.__root__.extend(result)
-            return self
+        self.__root__.extend(result)
+        return self
 
     def copy(self) -> "MessageChain":
         """
@@ -600,8 +583,7 @@ class MessageChain(AriadneBaseModel):
         """
         result = []
         for match in re.split(r"(\[mirai:.+?\])", string):
-            mirai = re.fullmatch(r"\[mirai:(.+?)(:(.+?))\]", match)
-            if mirai:
+            if mirai := re.fullmatch(r"\[mirai:(.+?)(:(.+?))\]", match):
                 j_string = mirai.group(3)
                 element_cls = ELEMENT_MAPPING[mirai.group(1)]
                 result.append(element_cls.parse_obj(json.loads(j_string)))
@@ -630,14 +612,16 @@ class MessageChain(AriadneBaseModel):
         elem_str_list: List[str] = []
         for i, elem in enumerate(self.__root__):
             if not isinstance(elem, Plain):
-                if remove_quote and isinstance(elem, Quote):
-                    continue
-                elif remove_source and isinstance(elem, Source):
+                if (
+                    remove_quote
+                    and isinstance(elem, Quote)
+                    or remove_source
+                    and isinstance(elem, Source)
+                ):
                     continue
                 elem_mapping[i] = elem
                 elem_str_list.append(f"\x02{i}_{elem.type}\x03")
-            else:
-                if (
+            elif (
                     remove_extra_space
                     and i  # not first element
                     and isinstance(
@@ -645,9 +629,9 @@ class MessageChain(AriadneBaseModel):
                     )  # following elements which have an dumb trailing space
                     and elem.text.startswith("  ")  # extra space (count >= 2)
                 ):
-                    elem_str_list.append(elem.text[1:])
-                else:
-                    elem_str_list.append(elem.text)
+                elem_str_list.append(elem.text[1:])
+            else:
+                elem_str_list.append(elem.text)
         return "".join(elem_str_list), elem_mapping
 
     @classmethod
@@ -671,9 +655,8 @@ class MessageChain(AriadneBaseModel):
                 if not isinstance(mapping[index], ELEMENT_MAPPING[class_name]):
                     raise ValueError("Validation failed: not matching element type!")
                 elements.append(mapping[index])
-            else:
-                if x:
-                    elements.append(Plain(x))
+            elif x:
+                elements.append(Plain(x))
         return cls.create(elements)
 
     def removeprefix(
@@ -700,7 +683,7 @@ class MessageChain(AriadneBaseModel):
                 else:
                     elements.append(element)
         if not elements or not isinstance(elements[0], Plain):
-            return self if not copy else self.copy()
+            return self.copy() if copy else self
         if elements[0].text.startswith(prefix):
             elements[0].text = elements[0].text[len(prefix) :]
             if copy:
@@ -720,7 +703,7 @@ class MessageChain(AriadneBaseModel):
         """
         elements = self.__root__[:]
         if not elements or not isinstance(elements[-1], Plain):
-            return self if not copy else self.copy()
+            return self.copy() if copy else self
         last_elem: Plain = elements[-1]
         if last_elem.text.endswith(suffix):
             last_elem.text = last_elem.text[: -len(suffix)]

@@ -27,12 +27,12 @@ class Formatter:
             if match := re.fullmatch(
                 "(?P<header>[\x02\x03])(?P<content>\\w+)(?P=header)", i
             ):
-                header: Literal["\x02", "\x03"] = match.group("header")
-                content: str = match.group("content")
-                full: str = match.group(0)
+                header: Literal["\x02", "\x03"] = match["header"]
+                full: str = match[0]
                 if header == "\x02":  # from args
                     element_list.append(args_mapping[full])
                 else:  # \x03, from kwargs
+                    content: str = match["content"]
                     element_list.append(kwargs_mapping[(content, full)])
             else:
                 element_list.append(Plain(i))

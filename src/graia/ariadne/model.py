@@ -24,9 +24,7 @@ def datetime_encoder(v: datetime):
 
 class DatetimeEncoder(json.JSONEncoder):
     def default(self, o: Any) -> Any:
-        if isinstance(o, datetime):
-            return int(o.timestamp())
-        return super().default(o)
+        return int(o.timestamp()) if isinstance(o, datetime) else super().default(o)
 
 
 class AriadneBaseModel(BaseModel):
@@ -304,10 +302,7 @@ class FileInfo(AriadneBaseModel):
         if not val:
             return None
         else:
-            if "remark" in val:  # Friend
-                return Friend.parse_obj(val)
-            else:  # Group
-                return Group.parse_obj(val)
+            return Friend.parse_obj(val) if "remark" in val else Group.parse_obj(val)
 
 
 FileInfo.update_forward_refs(FileInfo=FileInfo)
